@@ -93,7 +93,7 @@ let rec report_values node values =
   | hd :: tl ->
       Logs.info (fun m -> m "%s/%s: %f" node (fst hd |> string_of_tag) (snd hd));
       report_values node tl
-  | [] -> None
+  | [] -> Some (node)
 
 let handle_sensor_reading s =
   let open Core.Option.Let_syntax in
