@@ -99,9 +99,8 @@ let handle_sensor_reading s =
   let open Core.Option.Let_syntax in
   let%bind n, s = Cbor.array_of_string s in
   let%bind node, s = Cbor.byte_string_of_string s in
-  let%bind values, _s = sensor_values_of_string n s [] in
-  let%map _ = report_values node values in
-  Logs.debug (fun m -> m "Sensor data for %s" node)
+  let%map values, _s = sensor_values_of_string n s [] in
+  report_values node values
 
 let handle_message s tag =
   let t = tag_of_int tag in
