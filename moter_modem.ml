@@ -101,7 +101,7 @@ let handle_sensor_reading s =
   let%bind node, s = Cbor.byte_string_of_string s in
   let%bind values, _s = sensor_values_of_string n s [] in
   let%map _ = report_values node values in
-  Logs.info (fun m -> m "Sensor data for %s" node)
+  Logs.debug (fun m -> m "Sensor data for %s" node)
 
 let handle_message s tag =
   let t = tag_of_int tag in
