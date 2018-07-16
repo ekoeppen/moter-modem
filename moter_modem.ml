@@ -81,7 +81,7 @@ let rec sensor_values_of_string n s values =
     match Cbor.float_of_string s with
     | Some (v, s) ->
         let tag = tag_of_int t in
-        Logs.info (fun m -> m "%s: %f" (string_of_tag tag) v);
+        Logs.debug (fun m -> m "%s: %f" (string_of_tag tag) v);
         sensor_values_of_string (n - 1) s ((tag, v) :: values)
     | None -> None
   end
