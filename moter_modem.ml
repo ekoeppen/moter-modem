@@ -80,15 +80,20 @@ let rec sensor_values_of_string n s values =
     let%bind t, s = Cbor.tag_of_string s in
     match Cbor.float_of_string s with
     | Some (v, s) ->
-        Logs.info (fun m -> m "%s: %f" (tag_of_int t |> string_of_tag) v);
-        sensor_values_of_string (n - 1) s ((t, v) :: values)
+        let tag = tag_of_int t in
+        Logs.info (fun m -> m "%s: %f" (string_of_tag tag) v);
+        sensor_values_of_string (n - 1) s ((tag, v) :: values)
     | None -> None
   end
   else
     Some (values, s)
 
-let report_values node values =
-  None
+let rec report_values node values =
+  match values with
+  | hd :: tl ->
+      Logs.info (fun m -> m "%s/%s: %f" node (fst hd |> string_of_tag) (snd hd));
+      report_values node tl
+  | [] -> None
 
 let handle_sensor_reading s =
   let open Core.Option.Let_syntax in
