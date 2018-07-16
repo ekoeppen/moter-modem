@@ -76,10 +76,11 @@ let handle_test_packet s =
 
 let rec sensor_values_of_string n s values =
   if n > 1 then begin
-    match Cbor.tag_of_string s with
-    | Some (t, s) ->
-        Logs.info (fun m -> m "%s" (tag_of_int t |> string_of_tag));
-        sensor_values_of_string (n - 1) s (t :: values)
+    let%bind tag, s = match Cbor.tag_of_string s in
+    match Cbor.float_of_string with
+    | Some (v, s) ->
+        Logs.info (fun m -> m "%s: %f" (tag_of_int t |> string_of_tag) v);
+        sensor_values_of_string (n - 1) s ((t, v) :: values)
     | None -> None
   end
   else
