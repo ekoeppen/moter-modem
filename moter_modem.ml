@@ -76,8 +76,9 @@ let handle_test_packet s =
 
 let rec sensor_values_of_string n s values =
   if n > 1 then begin
-    let%bind tag, s = match Cbor.tag_of_string s in
-    match Cbor.float_of_string with
+    let open Core.Option.Let_syntax in
+    let%bind t, s = Cbor.tag_of_string s in
+    match Cbor.float_of_string s with
     | Some (v, s) ->
         Logs.info (fun m -> m "%s: %f" (tag_of_int t |> string_of_tag) v);
         sensor_values_of_string (n - 1) s ((t, v) :: values)
