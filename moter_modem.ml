@@ -1,7 +1,3 @@
-open Lwt
-open Logs
-open Logs_fmt
-open Logs_lwt
 open Cmdliner
 
 type tag_t =
@@ -140,7 +136,7 @@ let modem _ device =
 
 let test_modem _ _ =
   Logs.info (fun m -> m "Starting using test data");
-  let heartbeat_data = "\x10\x02\xD8\x41\x82\x44Node\x01\x03" in
+  let _heartbeat_data = "\x10\x02\xD8\x41\x82\x44Node\x01\x03" in
   let sensor_data = "\x10\x02\xC6\x83\x44Node\xC7\xC4\x82\x20\x0D\xC8\xC4\x82\x20\x18\xFA\x03" in
   let test_data = sensor_data in
   let ic = Lwt_io.of_bytes ~mode:Lwt_io.input (Lwt_bytes.of_string test_data) in
