@@ -1,5 +1,4 @@
 open Lwt
-open Printf
 open Logs
 open Logs_fmt
 open Logs_lwt
