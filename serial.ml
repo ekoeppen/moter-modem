@@ -26,16 +26,3 @@ let open_device device =
   let ic = Lwt_io.of_unix_fd ~mode:Lwt_io.input f in
   let oc = Unix.out_channel_of_descr f in
   (ic, oc)
-
-let handle_serial_data device =
-  let f = Unix.openfile device [Unix.O_RDWR] 0644 in
-  Logs.info (fun m -> m "Device %s opened" device);
-  let ic = Lwt_io.of_unix_fd ~mode:Lwt_io.input f in
-  let oc = Unix.out_channel_of_descr f in
-  let buffer = Buffer.create 16 in
-  output_string oc "\x10\x02Hello, World!\x10\x03"; flush oc;
-  let%lwt () = wait_for_packet ic in
-  let%lwt () = read_packet ic buffer in
-  Logs.info (fun m -> m "Read %s" (Buffer.contents buffer));
-  Unix.close f;
-  Lwt.return ()
