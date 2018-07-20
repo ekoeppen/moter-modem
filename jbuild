@@ -1,15 +1,23 @@
+; vim:ft=lisp:ts=2:set expandtab:
+
 (jbuild_version 1)
 (executable (
-				 (name moter_modem)
-				 (libraries (core
-								  lwt
-								  cmdliner
-								  logs fmt
-								  lwt.unix
-								  logs.fmt
-								  logs.cli
-								  fmt.cli fmt.tty
-								  unix
-								  cbor))
-				 (preprocess (pps (lwt_ppx ppx_let ppx_jane)))
-				 ))
+             (name moter_modem)
+             (libraries (core
+                          lwt
+                          lwt.unix
+                          cmdliner
+                          fmt
+                          fmt.cli
+                          fmt.tty
+                          logs
+                          logs.fmt
+                          logs.cli
+                          tls
+                          tls.lwt
+                          x509
+                          unix
+                          cbor
+                          mqtt_lwt))
+             (preprocess (pps (lwt_ppx ppx_let ppx_jane)))
+             ))
