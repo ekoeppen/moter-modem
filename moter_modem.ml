@@ -89,16 +89,22 @@ let rec sensor_values_of_string n s values =
   else
     Some (values, s)
 
-let rec messages_of_values node values =
-  match values with
-  | hd :: tl ->
-      Logs.info (fun m -> m "%s/%s: %f" node (fst hd |> string_of_tag) (snd hd));
-      messages_of_values node tl
-  | [] -> Some (node)
+let value_to_msg node value =
+    let message = Printf.sprintf "%s/%s" node (fst value |> string_of_tag) in
+    let payload = Printf.sprintf "%f" (snd value) in
+    (message, payload)
+
+let messages_of_values node values =
+  Core.List.fold
+    ~init:[]
+    ~f:(fun acc value -> (value_to_msg node value) :: acc)
+    values
 
 let rec publish_messages m client =
   match m with
-  | hd :: tl -> let%lwt () = Mqtt.pub (fst hd) (snd hd) client in publish_messages tl client
+  | hd :: tl ->
+      let%lwt () = Mqtt.pub (fst hd) (snd hd) client in
+      publish_messages tl client
   | [] -> Lwt.return ()
 
 let handle_sensor_reading s =
@@ -106,7 +112,7 @@ let handle_sensor_reading s =
   let%bind n, s = Cbor.array_of_string s in
   let%bind node, s = Cbor.byte_string_of_string s in
   let%map values, _s = sensor_values_of_string n s [] in
-  let _ = messages_of_values node values in [("/Modem", "Test"); "/Modem", "Test2"]
+  messages_of_values node values
 
 let handle_message s tag =
   let t = tag_of_int tag in
