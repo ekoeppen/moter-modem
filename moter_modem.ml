@@ -15,6 +15,8 @@ type tag_t =
   | Heartbeat_tag
   | Log_message_tag
 
+type response_t = (string * string) list option
+
 let tag_of_int t =
   match t with
   | 6 -> Sensor_reading_tag
@@ -58,16 +60,20 @@ let handle_heartbeat s =
   | (2, s) ->
     let%bind node, s = Cbor.byte_string_of_string s in
     let%map seq, _s = Cbor.int_of_string s in
-    Logs.info (fun m -> m "Node: %s seq: %d" node seq)
+    Logs.info (fun m -> m "Node: %s seq: %d" node seq);
+    [("/" ^ node ^ "/Heartbeat", string_of_int seq)]
   | _ -> None
 
-let handle_log_message s =
+let handle_log_message s : response_t =
   let open Core.Option.Let_syntax in
   let%map message, _ = Cbor.byte_string_of_string s in
-  Logs.info (fun m -> m "Message: %s" message)
+  Logs.info (fun m -> m "Message: %s" message);
+  [("/Modem/Log", message)]
 
 let handle_test_packet s =
-  Cbor.int_of_string s
+  let open Core.Option.Let_syntax in
+  let%map v, _s = Cbor.int_of_string s in
+  [("/Modem/Test", string_of_int v)]
 
 let rec sensor_values_of_string n s values =
   if n > 1 then begin
@@ -78,41 +84,46 @@ let rec sensor_values_of_string n s values =
         let tag = tag_of_int t in
         Logs.debug (fun m -> m "%s: %f" (string_of_tag tag) v);
         sensor_values_of_string (n - 1) s ((tag, v) :: values)
-    | None -> None
+    | _ -> None
   end
   else
     Some (values, s)
 
-let rec report_values node values =
+let rec messages_of_values node values =
   match values with
   | hd :: tl ->
       Logs.info (fun m -> m "%s/%s: %f" node (fst hd |> string_of_tag) (snd hd));
-      report_values node tl
+      messages_of_values node tl
   | [] -> Some (node)
+
+let rec publish_messages m client =
+  match m with
+  | hd :: tl -> let%lwt () = Mqtt.pub (fst hd) (snd hd) client in publish_messages tl client
+  | [] -> Lwt.return ()
 
 let handle_sensor_reading s =
   let open Core.Option.Let_syntax in
   let%bind n, s = Cbor.array_of_string s in
   let%bind node, s = Cbor.byte_string_of_string s in
   let%map values, _s = sensor_values_of_string n s [] in
-  report_values node values
+  let _ = messages_of_values node values in [("/Modem", "Test"); "/Modem", "Test2"]
 
-let handle_message s tag client =
+let handle_message s tag =
   let t = tag_of_int tag in
   Logs.info (fun m -> m "Tag: %s" (string_of_tag t));
-  let _ = match t with
-    | Sensor_reading_tag -> handle_sensor_reading s |> to_success
-    | Test_packet_tag -> handle_test_packet s |> to_success
-    | Heartbeat_tag -> handle_heartbeat s |> to_success
-    | Log_message_tag -> handle_log_message s |> to_success
-    | _ -> Logs.err (fun m -> m "Not a valid start tag %d" tag); false
-  in
-  Mqtt.pub "test" "123" client
+  match t with
+    | Log_message_tag -> handle_log_message s
+    | Heartbeat_tag -> handle_heartbeat s
+    | Test_packet_tag -> handle_test_packet s
+    | Sensor_reading_tag -> handle_sensor_reading s
+    | _ -> Logs.err (fun m -> m "Not a valid start tag %d" tag); None
 
 let handle_packet s client =
   match Cbor.tag_of_string s with
   | Some (tag, s) ->
-      handle_message s tag client
+      (match handle_message s tag with
+      | Some response -> publish_messages response client
+      | None -> Lwt.return ())
   | None ->
       (Logs.info (fun m -> m "Message does not start with tag");
       Lwt.return ())
