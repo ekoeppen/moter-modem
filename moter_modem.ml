@@ -158,7 +158,7 @@ let test_modem _logging _device broker port =
   modem_loop ic oc client
 
 let lwt_wrapper logging device broker port =
-  Lwt_main.run (test_modem logging device broker port)
+  Lwt_main.run (modem logging device broker port)
 
 let setup_log style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();

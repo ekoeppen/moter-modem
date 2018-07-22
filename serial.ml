@@ -23,6 +23,8 @@ let rec read_packet ic buffer =
 let open_device device =
   let f = Unix.openfile device [Unix.O_RDWR] 0644 in
   Logs.info (fun m -> m "Device %s opened" device);
+  let state = (ExtUnixSpecific.Ioctl.tiocmget f) land (lnot 0x004) in
+  let () = ExtUnixSpecific.Ioctl.tiocmset f state in
   let ic = Lwt_io.of_unix_fd ~mode:Lwt_io.input f in
   let oc = Unix.out_channel_of_descr f in
   (ic, oc)

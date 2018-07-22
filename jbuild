@@ -18,6 +18,7 @@
                           x509
                           unix
                           cbor
+                          extunix
                           mqtt_lwt))
              (preprocess (pps (lwt_ppx ppx_let ppx_jane)))
              ))
