@@ -54,13 +54,20 @@ let to_success = function
   | None -> false
   | _ -> true
 
+type channels_t = {
+  ic : in_channel;
+  oc : out_channel;
+  client : Mqtt_lwt.t;
+  prefix : string;
+}
+
 let handle_heartbeat s =
   let open Core.Option.Let_syntax in
   match%bind Cbor.array_of_string s with
   | (2, s) ->
     let%bind node, s = Cbor.byte_string_of_string s in
     let%map seq, _s = Cbor.int_of_string s in
-    Logs.info (fun m -> m "Heartbeat: Node: %s seq: %d" node seq);
+    Logs.info (fun m -> m "Heartbeat: %s %d" node seq);
     [("/" ^ node ^ "/Heartbeat", string_of_int seq)]
   | _ -> None
 
@@ -141,11 +148,19 @@ let rec modem_loop ic oc client prefix =
   let%lwt _ok = handle_packet (Buffer.contents packet) client prefix in
   modem_loop ic oc client prefix
 
+let display_topic _ topic payload id =
+  Logs_lwt.info (fun m -> m "Topic: %s Payload: %s Msg_id: %d" topic payload id)
+
+let rec command_loop ic oc client prefix =
+  let%lwt () = Mqtt.process client ~f:display_topic in
+  command_loop ic oc client prefix
+
 let modem _logging device broker port prefix =
   Logs.debug (fun m -> m "Starting");
   let ic, oc = Serial.open_device device in
   let%lwt client = Mqtt.start_client ~broker ~port ~ca_file:"" ~cert_file:"" ~key_file:"" in
-  modem_loop ic oc client prefix
+  let%lwt () = Mqtt.sub (prefix ^ "/Modem/Cmd") client in
+  Lwt.pick [modem_loop ic oc client prefix; command_loop ic oc client prefix]
 
 let lwt_wrapper logging device broker port prefix =
   Lwt_main.run (modem logging device broker port prefix)
