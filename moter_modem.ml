@@ -55,7 +55,7 @@ let to_success = function
   | _ -> true
 
 type channels_t = {
-  ic : in_channel;
+  ic : Lwt_io.input Lwt_io.channel;
   oc : out_channel;
   client : Mqtt_lwt.t;
   prefix : string;
@@ -141,26 +141,30 @@ let handle_packet s client prefix =
       (Logs.info (fun m -> m "Message does not start with tag");
       Lwt.return ())
 
-let rec modem_loop ic oc client prefix =
+let rec modem_loop channels =
   let packet = Buffer.create 80 in
-  let%lwt () = Serial.wait_for_packet ic in
-  let%lwt () = Serial.read_packet ic packet in
-  let%lwt _ok = handle_packet (Buffer.contents packet) client prefix in
-  modem_loop ic oc client prefix
+  let%lwt () = Serial.wait_for_packet channels.ic in
+  let%lwt () = Serial.read_packet channels.ic packet in
+  let%lwt _ok = handle_packet (Buffer.contents packet)
+    channels.client channels.prefix in
+  modem_loop channels
 
 let display_topic _ topic payload id =
-  Logs_lwt.info (fun m -> m "Topic: %s Payload: %s Msg_id: %d" topic payload id)
+  Logs_lwt.info (fun m ->
+    m "Topic: %s Payload: %s Msg_id: %d" topic payload id)
 
-let rec command_loop ic oc client prefix =
-  let%lwt () = Mqtt.process client ~f:display_topic in
-  command_loop ic oc client prefix
+let rec command_loop channels =
+  let%lwt () = Mqtt.process channels.client ~f:display_topic in
+  command_loop channels
 
 let modem _logging device broker port prefix =
   Logs.debug (fun m -> m "Starting");
   let ic, oc = Serial.open_device device in
-  let%lwt client = Mqtt.start_client ~broker ~port ~ca_file:"" ~cert_file:"" ~key_file:"" in
+  let%lwt client = Mqtt.start_client ~broker ~port
+    ~ca_file:"" ~cert_file:"" ~key_file:"" in
   let%lwt () = Mqtt.sub (prefix ^ "/Modem/Cmd") client in
-  Lwt.pick [modem_loop ic oc client prefix; command_loop ic oc client prefix]
+  let channels = {ic = ic; oc = oc; prefix = prefix; client = client} in
+  Lwt.pick [modem_loop channels; command_loop channels]
 
 let lwt_wrapper logging device broker port prefix =
   Lwt_main.run (modem logging device broker port prefix)
