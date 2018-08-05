@@ -11,14 +11,19 @@ let rec wait_for_packet ic =
 
 let read_escaped_char ic =
   let%lwt c = Lwt_io.read_char ic in
-  if c == dle then Lwt_io.read_char ic
-  else Lwt.return c
+  if c == dle then begin
+    let%lwt c = Lwt_io.read_char ic in
+    if c != etx then Lwt.return (Some c)
+    else Lwt.return None
+  end
+  else
+    Lwt.return (Some c)
 
 let rec read_packet ic buffer =
   let%lwt c = read_escaped_char ic in
-  if c != etx
-  then (Buffer.add_char buffer c; read_packet ic buffer)
-  else Lwt.return ()
+  match c with
+  | Some (c) -> (Buffer.add_char buffer c; read_packet ic buffer)
+  | None -> Lwt.return ()
 
 let open_device device =
   let f = Unix.openfile device [Unix.O_RDWR] 0644 in

@@ -60,14 +60,14 @@ let handle_heartbeat s =
   | (2, s) ->
     let%bind node, s = Cbor.byte_string_of_string s in
     let%map seq, _s = Cbor.int_of_string s in
-    Logs.info (fun m -> m "Node: %s seq: %d" node seq);
+    Logs.info (fun m -> m "Heartbeat: Node: %s seq: %d" node seq);
     [("/" ^ node ^ "/Heartbeat", string_of_int seq)]
   | _ -> None
 
 let handle_log_message s : response_t =
   let open Core.Option.Let_syntax in
   let%map message, _ = Cbor.byte_string_of_string s in
-  Logs.info (fun m -> m "Message: %s" message);
+  Logs.info (fun m -> m "Log: %s" message);
   [("/Modem/Log", message)]
 
 let handle_test_packet s =
@@ -100,11 +100,11 @@ let messages_of_values node values =
     ~f:(fun acc value -> (value_to_msg node value) :: acc)
     values
 
-let rec publish_messages m client =
+let rec publish_messages m client prefix =
   match m with
   | hd :: tl ->
-      let%lwt () = Mqtt.pub (fst hd) (snd hd) client in
-      publish_messages tl client
+      let%lwt () = Mqtt.pub (prefix ^ (fst hd)) (snd hd) client in
+      publish_messages tl client prefix
   | [] -> Lwt.return ()
 
 let handle_sensor_reading s =
@@ -116,7 +116,7 @@ let handle_sensor_reading s =
 
 let handle_message s tag =
   let t = tag_of_int tag in
-  Logs.info (fun m -> m "Tag: %s" (string_of_tag t));
+  Logs.debug (fun m -> m "Tag: %s" (string_of_tag t));
   match t with
     | Log_message_tag -> handle_log_message s
     | Heartbeat_tag -> handle_heartbeat s
@@ -124,41 +124,31 @@ let handle_message s tag =
     | Sensor_reading_tag -> handle_sensor_reading s
     | _ -> Logs.err (fun m -> m "Not a valid start tag %d" tag); None
 
-let handle_packet s client =
+let handle_packet s client prefix =
   match Cbor.tag_of_string s with
   | Some (tag, s) ->
       (match handle_message s tag with
-      | Some response -> publish_messages response client
+      | Some response -> publish_messages response client prefix
       | None -> Lwt.return ())
   | None ->
       (Logs.info (fun m -> m "Message does not start with tag");
       Lwt.return ())
 
-let rec modem_loop ic oc client =
+let rec modem_loop ic oc client prefix =
   let packet = Buffer.create 80 in
   let%lwt () = Serial.wait_for_packet ic in
   let%lwt () = Serial.read_packet ic packet in
-  let%lwt _ok = handle_packet (Buffer.contents packet) client in
-  modem_loop ic oc client
+  let%lwt _ok = handle_packet (Buffer.contents packet) client prefix in
+  modem_loop ic oc client prefix
 
-let modem _logging device broker port =
+let modem _logging device broker port prefix =
   Logs.debug (fun m -> m "Starting");
   let ic, oc = Serial.open_device device in
   let%lwt client = Mqtt.start_client ~broker ~port ~ca_file:"" ~cert_file:"" ~key_file:"" in
-  modem_loop ic oc client
+  modem_loop ic oc client prefix
 
-let test_modem _logging _device broker port =
-  Logs.info (fun m -> m "Starting using test data");
-  let _heartbeat_data = "\x10\x02\xD8\x41\x82\x44Node\x01\x03" in
-  let sensor_data = "\x10\x02\xC6\x83\x44Node\xC7\xC4\x82\x20\x0D\xC8\xC4\x82\x20\x18\xFA\x03" in
-  let test_data = sensor_data in
-  let ic = Lwt_io.of_bytes ~mode:Lwt_io.input (Lwt_bytes.of_string test_data) in
-  let oc = Lwt_io.of_bytes ~mode:Lwt_io.output (Lwt_bytes.create 80) in
-  let%lwt client = Mqtt.start_client ~broker ~port ~ca_file:"" ~cert_file:"" ~key_file:"" in
-  modem_loop ic oc client
-
-let lwt_wrapper logging device broker port =
-  Lwt_main.run (modem logging device broker port)
+let lwt_wrapper logging device broker port prefix =
+  Lwt_main.run (modem logging device broker port prefix)
 
 let setup_log style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();
@@ -182,10 +172,14 @@ let port_arg =
   let doc = "Port number" in
   Arg.(value & opt int 1883 & info ["p"; "port"] ~doc)
 
+let prefix_arg =
+  let doc = "MQTT prefix" in
+  Arg.(value & opt string "" & info ["prefix"] ~doc)
+
 let cmd =
   let doc = "MoteR Modem" in
   let exits = Term.default_exits in
-  Term.(const lwt_wrapper $ logging_arg $ device_arg $ broker_arg $ port_arg),
+  Term.(const lwt_wrapper $ logging_arg $ device_arg $ broker_arg $ port_arg $ prefix_arg),
   Term.info "moter-modem" ~doc ~exits
 
 let () = Term.(eval cmd |> exit)
