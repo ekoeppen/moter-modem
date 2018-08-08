@@ -14,6 +14,9 @@ type tag_t =
   | Test_packet_tag
   | Heartbeat_tag
   | Log_message_tag
+  | Ping_tag
+  | Register_value_tag
+  | Error_message_tag
 
 type response_t = (string * string) list option
 
@@ -32,6 +35,9 @@ let tag_of_int t =
   | 64 -> Test_packet_tag
   | 65 -> Heartbeat_tag
   | 66 -> Log_message_tag
+  | 67 -> Ping_tag
+  | 68 -> Register_value_tag
+  | 69 -> Error_message_tag
   | _ -> raise (Failure "Not a known tag")
 
 let string_of_tag t =
@@ -49,6 +55,9 @@ let string_of_tag t =
   | Test_packet_tag -> "Test packet"
   | Heartbeat_tag -> "Heartbeat"
   | Log_message_tag -> "Log message"
+  | Ping_tag -> "Ping"
+  | Register_value_tag -> "Register value"
+  | Error_message_tag -> "Error message"
 
 let to_success = function
   | None -> false
@@ -76,6 +85,22 @@ let handle_log_message s : response_t =
   let%map message, _ = Cbor.byte_string_of_string s in
   Logs.info (fun m -> m "Log: %s" message);
   [("/Modem/Log", message)]
+
+let handle_register_value s : response_t =
+  let open Core.Option.Let_syntax in
+  let%bind _n, s = Cbor.array_of_string s in
+  let%bind register, s = Cbor.int_of_string s in
+  let%map value, _ = Cbor.int_of_string s in
+  Logs.info (fun m -> m "Register: %02x %02x" register value);
+  []
+
+let handle_error_message s : response_t =
+  let open Core.Option.Let_syntax in
+  let%bind _n, s = Cbor.array_of_string s in
+  let%bind file, s = Cbor.byte_string_of_string s in
+  let%map line, _ = Cbor.int_of_string s in
+  Logs.err (fun m -> m "Program error: %s %d" file line);
+  []
 
 let handle_test_packet s =
   let open Core.Option.Let_syntax in
@@ -129,6 +154,8 @@ let handle_message s tag =
     | Heartbeat_tag -> handle_heartbeat s
     | Test_packet_tag -> handle_test_packet s
     | Sensor_reading_tag -> handle_sensor_reading s
+    | Register_value_tag -> handle_register_value s
+    | Error_message_tag -> handle_error_message s
     | _ -> Logs.err (fun m -> m "Not a valid start tag %d" tag); None
 
 let handle_packet s client prefix =
@@ -149,12 +176,15 @@ let rec modem_loop channels =
     channels.client channels.prefix in
   modem_loop channels
 
-let display_topic _ topic payload id =
-  Logs_lwt.info (fun m ->
-    m "Topic: %s Payload: %s Msg_id: %d" topic payload id)
+let display_topic channels _ topic payload id =
+  Logs.info (fun m -> m "Topic: %s Payload: %s Msg_id: %d" topic payload id);
+  let cmd = `Hex payload in
+  let bin_cmd = Hex.to_string cmd in
+  Serial.write_packet channels.oc bin_cmd;
+  Lwt.return ()
 
 let rec command_loop channels =
-  let%lwt () = Mqtt.process channels.client ~f:display_topic in
+  let%lwt () = Mqtt.process channels.client ~f:(display_topic channels) in
   command_loop channels
 
 let modem _logging device broker port prefix =

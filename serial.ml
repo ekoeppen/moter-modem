@@ -27,6 +27,16 @@ let rec read_packet ic buffer =
   | Some (c) -> (Buffer.add_char buffer c; read_packet ic buffer)
   | None -> Lwt.return ()
 
+let write_packet oc buffer =
+  let b = Buffer.create 64 in
+  Buffer.add_char b dle; Buffer.add_char b stx;
+  String.iter
+    (fun c -> if c == dle then Buffer.add_char b dle; Buffer.add_char b c)
+    buffer;
+  Buffer.add_char b dle; Buffer.add_char b etx;
+  Buffer.output_buffer oc b;
+  flush oc
+
 let open_device device =
   let f = Unix.openfile device [Unix.O_RDWR] 0644 in
   Logs.info (fun m -> m "Device %s opened" device);
