@@ -100,7 +100,7 @@ let handle_error_message s : response_t =
   let%bind file, s = Cbor.byte_string_of_string s in
   let%map line, _ = Cbor.int_of_string s in
   Logs.err (fun m -> m "Program error: %s %d" file line);
-  []
+  [("/Modem/Error", (Printf.sprintf "%s:%d" file line))]
 
 let handle_test_packet s =
   let open Core.Option.Let_syntax in
