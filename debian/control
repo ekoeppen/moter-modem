@@ -1,0 +1,12 @@
+Source: moter-modem
+Section: utils
+Priority: optional
+Maintainer: Eckhart Koeppen <eck@40hz.org>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.1.2
+
+Package: moter-modem
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Tools to interface with wireless motes.
+ Motes use CBOR as the protocol over serial.
