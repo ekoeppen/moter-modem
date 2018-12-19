@@ -3,6 +3,8 @@
 (jbuild_version 1)
 (executable (
              (name moter_modem)
+             (public_name moter_modem)
+             (package moter)
              (libraries (core
                           lwt
                           lwt.unix

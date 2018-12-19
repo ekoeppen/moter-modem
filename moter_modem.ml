@@ -102,6 +102,12 @@ let handle_error_message s : response_t =
   Logs.err (fun m -> m "Program error: %s %d" file line);
   [("/Modem/Error", (Printf.sprintf "%s:%d" file line))]
 
+let handle_ping s =
+  let open Core.Option.Let_syntax in
+  let%map node, _s = Cbor.byte_string_of_string s in
+  Logs.info (fun m -> m "Ping: %s" node);
+  [("/Modem/Ping", node)]
+
 let handle_test_packet s =
   let open Core.Option.Let_syntax in
   let%map v, _s = Cbor.int_of_string s in
@@ -153,6 +159,7 @@ let handle_message s tag =
     | Log_message_tag -> handle_log_message s
     | Heartbeat_tag -> handle_heartbeat s
     | Test_packet_tag -> handle_test_packet s
+    | Ping_tag -> handle_ping s
     | Sensor_reading_tag -> handle_sensor_reading s
     | Register_value_tag -> handle_register_value s
     | Error_message_tag -> handle_error_message s
