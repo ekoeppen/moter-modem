@@ -197,7 +197,9 @@ let rec command_loop channels =
 let modem _logging device broker port prefix =
   Logs.debug (fun m -> m "Starting");
   let ic, oc = Serial.open_device device in
-  let%lwt client = Mqtt.start_client ~broker ~port
+  let id = Random.self_init (); Random.bits () |>
+    Printf.sprintf "mqtt_lwt_%d" in
+  let%lwt client = Mqtt.start_client ~id ~broker ~port
     ~ca_file:"" ~cert_file:"" ~key_file:"" in
   let%lwt () = Mqtt.sub (prefix ^ "/Modem/Cmd") client in
   let channels = {ic = ic; oc = oc; prefix = prefix; client = client} in
