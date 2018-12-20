@@ -2,7 +2,7 @@
 
 (jbuild_version 1)
 (executable (
-             (name moter_modem)
+             (name modem)
              (public_name moter-modem)
              (package moter-modem)
              (libraries (core

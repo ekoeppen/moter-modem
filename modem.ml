@@ -194,19 +194,18 @@ let rec command_loop channels =
   let%lwt () = Mqtt.process channels.client ~f:(display_topic channels) in
   command_loop channels
 
-let modem _logging device broker port prefix =
+let modem _logging device broker port ca_file cert_file key_file prefix =
   Logs.debug (fun m -> m "Starting");
   let ic, oc = Serial.open_device device in
   let id = Random.self_init (); Random.bits () |>
     Printf.sprintf "mqtt_lwt_%d" in
-  let%lwt client = Mqtt.start_client ~id ~broker ~port
-    ~ca_file:"" ~cert_file:"" ~key_file:"" in
+  let%lwt client = Mqtt.start_client ~id ~broker ~port ~ca_file ~cert_file ~key_file in
   let%lwt () = Mqtt.sub (prefix ^ "/Modem/Cmd") client in
   let channels = {ic = ic; oc = oc; prefix = prefix; client = client} in
   Lwt.pick [modem_loop channels; command_loop channels]
 
-let lwt_wrapper logging device broker port prefix =
-  Lwt_main.run (modem logging device broker port prefix)
+let lwt_wrapper logging device broker port prefix ca_file cert_file key_file =
+  Lwt_main.run (modem logging device broker port ca_file cert_file key_file prefix)
 
 let setup_log style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();
@@ -234,10 +233,22 @@ let prefix_arg =
   let doc = "MQTT prefix" in
   Arg.(value & opt string "" & info ["prefix"] ~doc)
 
+let ca_file =
+  let doc = "CA file" in
+  Arg.(value & opt non_dir_file "" & info ["ca"] ~doc)
+
+let cert_file =
+  let doc = "Client certificate file" in
+  Arg.(value & opt non_dir_file "" & info ["cert"] ~doc)
+
+let key_file =
+  let doc = "Client key" in
+  Arg.(value & opt non_dir_file "" & info ["key"] ~doc)
+
 let cmd =
   let doc = "MoteR Modem" in
   let exits = Term.default_exits in
-  Term.(const lwt_wrapper $ logging_arg $ device_arg $ broker_arg $ port_arg $ prefix_arg),
+  Term.(const lwt_wrapper $ logging_arg $ device_arg $ broker_arg $ port_arg $ ca_file $ cert_file $ key_file $ prefix_arg),
   Term.info "moter-modem" ~doc ~exits
 
 let () = Term.(eval cmd |> exit)

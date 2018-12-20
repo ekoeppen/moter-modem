@@ -1,3 +1,9 @@
+moter-modem (1.0.1-1) bionic; urgency=medium
+
+  * Removed duplicate executable
+
+ -- Eckhart Koeppen <eck@40hz.org>  Thu, 20 Dec 2018 20:24:11 +0200
+
 moter-modem (1.0.0-1) bionic; urgency=low
 
   * Initial Release.
