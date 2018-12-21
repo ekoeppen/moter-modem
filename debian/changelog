@@ -1,8 +1,8 @@
-moter-modem (1.0.1-1) bionic; urgency=medium
+moter-modem (1.0.1-4) bionic; urgency=medium
 
-  * Removed duplicate executable
+  * Repackage with new files
 
- -- Eckhart Koeppen <eck@40hz.org>  Thu, 20 Dec 2018 20:24:11 +0200
+ -- Eckhart Koeppen <eck@40hz.org>  Fri, 21 Dec 2018 05:25:11 +0000
 
 moter-modem (1.0.0-1) bionic; urgency=low
 
