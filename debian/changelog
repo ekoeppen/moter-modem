@@ -1,4 +1,10 @@
-moter-modem (1.0.1-4) bionic; urgency=medium
+moter-modem (1.0.2-1) bionic; urgency=medium
+
+  * Fix incorrect parameter order
+
+ -- Eckhart Koeppen <eck@40hz.org>  Wed, 02 Jan 2019 12:46:00 +0200
+
+moter-modem (1.0.1-1) bionic; urgency=medium
 
   * Repackage with new files
 

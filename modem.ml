@@ -195,7 +195,7 @@ let rec command_loop channels =
   command_loop channels
 
 let modem _logging device broker port ca_file cert_file key_file prefix =
-  Logs.debug (fun m -> m "Starting");
+  Logs.debug (fun m -> m "Start reporting to %s:%d/%s (%s %s %s)" broker port prefix cert_file key_file ca_file);
   let ic, oc = Serial.open_device device in
   let id = Random.self_init (); Random.bits () |>
     Printf.sprintf "mqtt_lwt_%d" in
@@ -204,7 +204,7 @@ let modem _logging device broker port ca_file cert_file key_file prefix =
   let channels = {ic = ic; oc = oc; prefix = prefix; client = client} in
   Lwt.pick [modem_loop channels; command_loop channels]
 
-let lwt_wrapper logging device broker port prefix ca_file cert_file key_file =
+let lwt_wrapper logging device broker port ca_file cert_file key_file prefix =
   Lwt_main.run (modem logging device broker port ca_file cert_file key_file prefix)
 
 let setup_log style_renderer level =
