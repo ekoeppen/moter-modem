@@ -77,14 +77,24 @@ let handle_heartbeat s =
     let%bind node, s = Cbor.byte_string_of_string s in
     let%map seq, _s = Cbor.int_of_string s in
     Logs.info (fun m -> m "Heartbeat: %s %d" node seq);
-    [("/" ^ node ^ "/Heartbeat", string_of_int seq)]
+    [
+      (
+        "/" ^ node,
+        (Printf.sprintf "{\"heartbeat\":%d,\"ts\":%.0f}" seq (Unix.time ()))
+      )
+    ]
   | _ -> None
 
 let handle_log_message s : response_t =
   let open Core.Option.Let_syntax in
   let%map message, _ = Cbor.byte_string_of_string s in
   Logs.info (fun m -> m "Log: %s" message);
-  [("/Modem/Log", message)]
+  [
+    (
+      "/Modem",
+      (Printf.sprintf "{\"log_message\":\"%s\",\"ts\":%.0f}" message (Unix.time ()))
+    )
+  ]
 
 let handle_register_value s : response_t =
   let open Core.Option.Let_syntax in
@@ -92,7 +102,12 @@ let handle_register_value s : response_t =
   let%bind register, s = Cbor.int_of_string s in
   let%map value, _ = Cbor.int_of_string s in
   Logs.info (fun m -> m "Register: %02x %02x" register value);
-  []
+  [
+    (
+      "/Modem",
+      (Printf.sprintf "{\"register\":{\"%d\":%d},\"ts\":%.0f}" register value (Unix.time ()))
+    )
+  ]
 
 let handle_error_message s : response_t =
   let open Core.Option.Let_syntax in
@@ -100,18 +115,33 @@ let handle_error_message s : response_t =
   let%bind file, s = Cbor.byte_string_of_string s in
   let%map line, _ = Cbor.int_of_string s in
   Logs.err (fun m -> m "Program error: %s %d" file line);
-  [("/Modem/Error", (Printf.sprintf "%s:%d" file line))]
+  [
+    (
+      "/Modem",
+      (Printf.sprintf "{\"error\":\"%s:%d\",\"ts\":%.0f}" file line (Unix.time ()))
+    )
+  ]
 
 let handle_ping s =
   let open Core.Option.Let_syntax in
   let%map node, _s = Cbor.byte_string_of_string s in
   Logs.info (fun m -> m "Ping: %s" node);
-  [("/Modem/Ping", node)]
+  [
+    (
+      "/Modem",
+      (Printf.sprintf "{\"ping\":\"%s\",\"ts\":%.0f}" node (Unix.time ()))
+    )
+  ]
 
 let handle_test_packet s =
   let open Core.Option.Let_syntax in
   let%map v, _s = Cbor.int_of_string s in
-  [("/Modem/Test", string_of_int v)]
+  [
+    (
+      "/Modem",
+      (Printf.sprintf "{\"test\":\"%d\",\"ts\":%.0f}" v (Unix.time ()))
+    )
+  ]
 
 let rec sensor_values_of_string n s values =
   if n > 1 then begin
@@ -127,16 +157,13 @@ let rec sensor_values_of_string n s values =
   else
     Some (values, s)
 
-let value_to_msg node value =
-    let message = Printf.sprintf "%s/%s" node (fst value |> string_of_tag) in
-    let payload = Printf.sprintf "%f" (snd value) in
-    (message, payload)
-
-let messages_of_values node values =
-  Core.List.fold
-    ~init:[]
-    ~f:(fun acc value -> (value_to_msg node value) :: acc)
-    values
+let string_of_values values =
+  let s = Core.List.fold
+    ~init:""
+    ~f:(fun acc value ->
+      acc ^ (Printf.sprintf "\"%s\":%f," (fst value |> string_of_tag) (snd value)))
+    values in
+  s ^ (Printf.sprintf "\"ts\":%.0f" (Unix.time ()))
 
 let rec publish_messages m client prefix =
   match m with
@@ -147,10 +174,16 @@ let rec publish_messages m client prefix =
 
 let handle_sensor_reading s =
   let open Core.Option.Let_syntax in
+  Logs.info (fun m -> m "Sensor data");
   let%bind n, s = Cbor.array_of_string s in
   let%bind node, s = Cbor.byte_string_of_string s in
   let%map values, _s = sensor_values_of_string n s [] in
-  messages_of_values node values
+  [
+    (
+      "/" ^ node,
+      Printf.sprintf "{%s}" (string_of_values values)
+    )
+  ]
 
 let handle_message s tag =
   let t = tag_of_int tag in
