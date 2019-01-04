@@ -252,7 +252,8 @@ let logging_arg =
 
 let device_arg =
   let doc = "Device" in
-  Arg.(value & opt string "/dev/ttyUSB0" & info ["d"; "device"] ~doc)
+  let env = Arg.env_var "MOTER_DEVICE" in
+  Arg.(value & opt string "/dev/ttyUSB0" & info ["d"; "device"] ~env ~doc)
 
 let broker_arg =
   let doc = "MQTT broker" in
