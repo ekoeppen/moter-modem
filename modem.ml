@@ -227,18 +227,24 @@ let rec command_loop channels =
   let%lwt () = Mqtt.process channels.client ~f:(display_topic channels) in
   command_loop channels
 
-let modem _logging device broker port ca_file cert_file key_file prefix =
-  Logs.debug (fun m -> m "Start reporting to %s:%d/%s (%s %s %s)" broker port prefix cert_file key_file ca_file);
+let modem _logging ~device ~broker ~port ~proxy ~prefix ~certs =
+  Logs.debug (fun m -> m "Start reporting to %s:%d/%s" broker port prefix);
+  if (Mqtt.valid certs) then Logs.debug (fun m -> m "Certs: %s %s %s" certs.cert certs.key certs.ca);
+  if (proxy <> "") then Logs.debug (fun m -> m "Proxy: %s" proxy);
   let ic, oc = Serial.open_device device in
   let id = Random.self_init (); Random.bits () |>
     Printf.sprintf "mqtt_lwt_%d" in
-  let%lwt client = Mqtt.start_client ~id ~broker ~port ~ca_file ~cert_file ~key_file in
+  let%lwt client = Mqtt.start_client ~id ~broker ~port ~proxy ~certs in
   let%lwt () = Mqtt.sub (prefix ^ "/Modem/Cmd") client in
   let channels = {ic = ic; oc = oc; prefix = prefix; client = client} in
   Lwt.pick [modem_loop channels; command_loop channels]
 
-let lwt_wrapper logging device broker port ca_file cert_file key_file prefix =
-  Lwt_main.run (modem logging device broker port ca_file cert_file key_file prefix)
+let lwt_wrapper logging device broker port proxy ca_file cert_file key_file prefix =
+  let certs : Mqtt.certs_t = {
+    cert = cert_file;
+    key = key_file;
+    ca = ca_file} in
+  Lwt_main.run (modem logging ~device ~broker ~port ~proxy ~prefix ~certs)
 
 let setup_log style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();
@@ -249,6 +255,11 @@ let setup_log style_renderer level =
 let logging_arg =
   let env = Arg.env_var "MOTER_MODEM_VERBOSITY" in
   Term.(const setup_log $ Fmt_cli.style_renderer () $ Logs_cli.level ~env ())
+
+let proxy_arg =
+  let doc = "SOCKS5 proxy" in
+  let env = Arg.env_var "MOTER_SOCKS_PROXY" in
+  Arg.(value & opt string "" & info ["proxy"] ~env ~doc)
 
 let device_arg =
   let doc = "Device" in
@@ -282,7 +293,10 @@ let key_file =
 let cmd =
   let doc = "MoteR Modem" in
   let exits = Term.default_exits in
-  Term.(const lwt_wrapper $ logging_arg $ device_arg $ broker_arg $ port_arg $ ca_file $ cert_file $ key_file $ prefix_arg),
+  Term.(const lwt_wrapper $ logging_arg $ device_arg $
+    broker_arg $ port_arg $ proxy_arg $
+    ca_file $ cert_file $ key_file $
+    prefix_arg),
   Term.info "moter-modem" ~doc ~exits
 
 let () = Term.(eval cmd |> exit)
