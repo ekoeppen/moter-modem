@@ -1,3 +1,9 @@
+moter-modem (1.2.0-1) bionic; urgency=medium
+
+  * Add SOCKS5 proxy support
+
+ -- Eckhart Koeppen <eck@40hz.org>  Sat, 05 Jan 2019 07:25:41 +0200
+
 moter-modem (1.1.0-1) bionic; urgency=medium
 
   * Change to JSON format for message payloads

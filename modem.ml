@@ -199,6 +199,7 @@ let handle_message s tag =
     | _ -> Logs.err (fun m -> m "Not a valid start tag %d" tag); None
 
 let handle_packet s client prefix =
+  Logs.debug (fun m -> m "Packet: ");
   match Cbor.tag_of_string s with
   | Some (tag, s) ->
       (match handle_message s tag with
@@ -229,18 +230,24 @@ let rec command_loop channels =
 
 let modem _logging ~device ~broker ~port ~proxy ~prefix ~certs =
   Logs.debug (fun m -> m "Start reporting to %s:%d/%s" broker port prefix);
-  if (Mqtt.valid certs) then Logs.debug (fun m -> m "Certs: %s %s %s" certs.cert certs.key certs.ca);
+  if (Conn.valid certs) then Logs.debug (fun m -> m "Certs: %s %s %s" certs.cert certs.key certs.ca);
   if (proxy <> "") then Logs.debug (fun m -> m "Proxy: %s" proxy);
   let ic, oc = Serial.open_device device in
   let id = Random.self_init (); Random.bits () |>
     Printf.sprintf "mqtt_lwt_%d" in
-  let%lwt client = Mqtt.start_client ~id ~broker ~port ~proxy ~certs in
-  let%lwt () = Mqtt.sub (prefix ^ "/Modem/Cmd") client in
+  let%lwt (mqtt_ic, mqtt_oc) = Conn.connect ~host:broker ~port ~proxy ~certs in
+  let%lwt client = Mqtt_lwt.connect {oc = mqtt_oc; ic = mqtt_ic} ~opts:{Mqtt_lwt.default_conn_opts with client_id = id} in
+  let%lwt () = Mqtt_lwt.subscribe ~topics:[prefix ^ "/Modem/Cmd"] client in
   let channels = {ic = ic; oc = oc; prefix = prefix; client = client} in
-  Lwt.pick [modem_loop channels; command_loop channels]
+  Lwt.pick [
+    Mqtt_lwt.process_publish_pkt client (display_topic channels);
+    Mqtt_lwt.run client;
+    modem_loop channels;
+    command_loop channels
+  ]
 
 let lwt_wrapper logging device broker port proxy ca_file cert_file key_file prefix =
-  let certs : Mqtt.certs_t = {
+  let certs : Conn.certs_t = {
     cert = cert_file;
     key = key_file;
     ca = ca_file} in
