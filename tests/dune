@@ -1,6 +1,16 @@
 (executables
  (names serial_test)
- (libraries core lwt cmdliner logs fmt lwt.unix logs.fmt logs.cli fmt.cli
-   fmt.tty unix)
+ (libraries
+  core
+  lwt
+  cmdliner
+  logs
+  fmt
+  lwt.unix
+  logs.fmt
+  logs.cli
+  fmt.cli
+  fmt.tty
+  unix)
  (preprocess
   (pps lwt_ppx ppx_let ppx_jane)))
