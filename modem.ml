@@ -260,17 +260,17 @@ let setup_log style_renderer level =
   ()
 
 let logging_arg =
-  let env = Arg.env_var "MOTER_MODEM_VERBOSITY" in
+  let env = Cmd.Env.info "MOTER_MODEM_VERBOSITY" in
   Term.(const setup_log $ Fmt_cli.style_renderer () $ Logs_cli.level ~env ())
 
 let proxy_arg =
   let doc = "SOCKS5 proxy" in
-  let env = Arg.env_var "MOTER_SOCKS_PROXY" in
+  let env = Cmd.Env.info "MOTER_SOCKS_PROXY" in
   Arg.(value & opt string "" & info ["proxy"] ~env ~doc)
 
 let device_arg =
   let doc = "Device" in
-  let env = Arg.env_var "MOTER_DEVICE" in
+  let env = Cmd.Env.info "MOTER_DEVICE" in
   Arg.(value & opt string "/dev/ttyUSB0" & info ["d"; "device"] ~env ~doc)
 
 let broker_arg =
@@ -299,11 +299,11 @@ let key_file =
 
 let cmd =
   let doc = "MoteR Modem" in
-  let exits = Term.default_exits in
-  Term.(const lwt_wrapper $ logging_arg $ device_arg $
+  let term = Term.(const lwt_wrapper $ logging_arg $ device_arg $
     broker_arg $ port_arg $ proxy_arg $
     ca_file $ cert_file $ key_file $
-    prefix_arg),
-  Term.info "moter-modem" ~doc ~exits
+    prefix_arg) in
+  let info = Cmd.info doc in
+  Cmd.v info term
 
-let () = Term.(eval cmd |> exit)
+let () = Cmd.eval cmd |> exit
