@@ -7,222 +7,24 @@ type channels_t = {
   prefix : string;
 }
 
-type tag_t =
-  | Sensor_reading_tag
-  | Voltage_tag
-  | Temperature_tag
-  | Humidity_tag
-  | Pressure_tag
-  | Lux_tag
-  | Uv_index_tag
-  | Motion_tag
-  | Sound_level_tag
-  | Co2_tag
-  | Test_packet_tag
-  | Heartbeat_tag
-  | Log_message_tag
-  | Ping_tag
-  | Register_value_tag
-  | Error_message_tag
-  | Modem_message_tag
-  | Modem_id_tag
-  | RF_packet_tag
-  | Mote_info_tag
-  | Revision_tag
-
-let tag_of_int t =
-  match t with
-  | 6 -> Sensor_reading_tag
-  | 7 -> Voltage_tag
-  | 8 -> Temperature_tag
-  | 9 -> Humidity_tag
-  | 10 -> Pressure_tag
-  | 11 -> Lux_tag
-  | 12 -> Uv_index_tag
-  | 13 -> Motion_tag
-  | 14 -> Sound_level_tag
-  | 15 -> Co2_tag
-  | 64 -> Test_packet_tag
-  | 65 -> Heartbeat_tag
-  | 66 -> Log_message_tag
-  | 67 -> Ping_tag
-  | 68 -> Register_value_tag
-  | 69 -> Error_message_tag
-  | 70 -> Modem_message_tag
-  | 71 -> Modem_id_tag
-  | 72 -> RF_packet_tag
-  | 73 -> Mote_info_tag
-  | 74 -> Revision_tag
-  | _ -> raise (Failure "Not a known tag")
-
-let string_of_tag t =
-  match t with
-  | Sensor_reading_tag -> "Sensor reading"
-  | Voltage_tag -> "Voltage"
-  | Temperature_tag -> "Temperature"
-  | Humidity_tag -> "Humidity"
-  | Pressure_tag -> "Pressure"
-  | Lux_tag -> "Lux"
-  | Uv_index_tag -> "UV index"
-  | Motion_tag -> "Motion"
-  | Sound_level_tag -> "Sound level"
-  | Co2_tag -> "CO2"
-  | Test_packet_tag -> "Test packet"
-  | Heartbeat_tag -> "Heartbeat"
-  | Log_message_tag -> "Log message"
-  | Ping_tag -> "Ping"
-  | Register_value_tag -> "Register value"
-  | Error_message_tag -> "Error message"
-  | Modem_message_tag -> "Modem message"
-  | Modem_id_tag -> "Modem ID"
-  | RF_packet_tag -> "RF packet"
-  | Mote_info_tag -> "Mote info"
-  | Revision_tag -> "Revision"
-
-type response_t = (string * string) list option
-
-let handle_heartbeat s =
-  let open Core.Option.Let_syntax in
-  match%bind Cbor.array_of_string s with
-  | (2, s) ->
-    let%bind node, s = Cbor.byte_string_of_string s in
-    let%map seq, _s = Cbor.int_of_string s in
-    Logs.info (fun m -> m "Heartbeat: %s %d" node seq);
-    [
-      (
-        "/" ^ node,
-        (Printf.sprintf "{\"heartbeat\":%d,\"ts\":%.0f}" seq (Unix.time ()))
-      )
-    ]
-  | _ -> None
-
-let handle_log_message s : response_t =
-  let open Core.Option.Let_syntax in
-  let%map message, _ = Cbor.byte_string_of_string s in
-  Logs.info (fun m -> m "Log: %s" message);
-  [
-    (
-      "/Modem",
-      (Printf.sprintf "{\"log_message\":\"%s\",\"ts\":%.0f}" message (Unix.time ()))
-    )
-  ]
-
-let handle_register_value s : response_t =
-  let open Core.Option.Let_syntax in
-  let%bind _n, s = Cbor.array_of_string s in
-  let%bind register, s = Cbor.int_of_string s in
-  let%map value, _ = Cbor.int_of_string s in
-  Logs.info (fun m -> m "Register: %02x %02x" register value);
-  [
-    (
-      "/Modem",
-      (Printf.sprintf "{\"register\":{\"%d\":%d},\"ts\":%.0f}" register value (Unix.time ()))
-    )
-  ]
-
-let handle_error_message s : response_t =
-  let open Core.Option.Let_syntax in
-  let%bind _n, s = Cbor.array_of_string s in
-  let%bind file, s = Cbor.byte_string_of_string s in
-  let%map line, _ = Cbor.int_of_string s in
-  Logs.err (fun m -> m "Program error: %s %d" file line);
-  [
-    (
-      "/Modem",
-      (Printf.sprintf "{\"error\":\"%s:%d\",\"ts\":%.0f}" file line (Unix.time ()))
-    )
-  ]
-
-let handle_ping s =
-  let open Core.Option.Let_syntax in
-  let%map node, _s = Cbor.byte_string_of_string s in
-  Logs.info (fun m -> m "Ping: %s" node);
-  [
-    (
-      "/Modem",
-      (Printf.sprintf "{\"ping\":\"%s\",\"ts\":%.0f}" node (Unix.time ()))
-    )
-  ]
-
-let handle_test_packet s =
-  let open Core.Option.Let_syntax in
-  let%map v, _s = Cbor.int_of_string s in
-  [
-    (
-      "/Modem",
-      (Printf.sprintf "{\"test\":\"%d\",\"ts\":%.0f}" v (Unix.time ()))
-    )
-  ]
-
-let rec sensor_values_of_string n s values =
-  if n > 1 then begin
-    let open Core.Option.Let_syntax in
-    let%bind t, s = Cbor.tag_of_string s in
-    match Cbor.float_of_string s with
-    | Some (v, s) ->
-        let tag = tag_of_int t in
-        Logs.debug (fun m -> m "%s: %f" (string_of_tag tag) v);
-        sensor_values_of_string (n - 1) s ((tag, v) :: values)
-    | _ -> None
-  end
-  else
-    Some (values, s)
-
-let string_of_values values =
-  let s = Core.List.fold
-    ~init:""
-    ~f:(fun acc value ->
-      acc ^ (Printf.sprintf "\"%s\":%f," (fst value |> string_of_tag) (snd value)))
-    values in
-  s ^ (Printf.sprintf "\"ts\":%.0f" (Unix.time ()))
-
-let handle_sensor_reading s =
-  let open Core.Option.Let_syntax in
-  Logs.info (fun m -> m "Sensor data");
-  let%bind n, s = Cbor.array_of_string s in
-  let%bind node, s = Cbor.byte_string_of_string s in
-  let%map values, _s = sensor_values_of_string n s [] in
-  [
-    (
-      "/" ^ node,
-      Printf.sprintf "{%s}" (string_of_values values)
-    )
-  ]
-
-let handle_message s tag =
-  let t = tag_of_int tag in
-  Logs.debug (fun m -> m "Tag: %s" (string_of_tag t));
-  match t with
-    | Log_message_tag -> handle_log_message s
-    | Heartbeat_tag -> handle_heartbeat s
-    | Test_packet_tag -> handle_test_packet s
-    | Ping_tag -> handle_ping s
-    | Sensor_reading_tag -> handle_sensor_reading s
-    | Register_value_tag -> handle_register_value s
-    | Error_message_tag -> handle_error_message s
-    | _ -> Logs.err (fun m -> m "Not a valid start tag %d" tag); None
-
-let rec publish_messages m client prefix =
+let publish_message m client prefix =
   match m with
-  | hd :: tl ->
-      let%lwt () = Mqtt.pub (prefix ^ (fst hd)) (snd hd) client true in
-      publish_messages tl client prefix
-  | [] -> Lwt.return ()
+  | (_, Some node, regs) ->
+      Logs.debug (fun m -> m "%s/Node/%s %s\n" prefix node regs);
+      Mqtt.pub (prefix ^ "/Node/" ^ node) regs client true
+  | (modem, None, regs) ->
+      Logs.debug (fun m -> m "%s/Modem/%X %s\n" prefix modem regs);
+      Mqtt.pub (Printf.sprintf "%s/Modem/%X" prefix modem) regs client true
 
 let handle_packet s client prefix =
-  match Cbor.tag_of_string s with
-  | Some (tag, s) ->
-      (match handle_message s tag with
-      | Some response -> publish_messages response client prefix
-      | None -> Lwt.return ())
-  | None ->
-      (Logs.info (fun m -> m "Message does not start with tag");
-      Lwt.return ())
+  match Convert.handle_packet s with
+  | Some response -> publish_message response client prefix
+  | None -> Lwt.return ()
 
 let rec modem_loop channels =
   let%lwt packet = Lwt_io.read_line channels.ic in
   Logs.debug (fun m -> m "Packet: %s" packet);
-  let%lwt _ok = handle_packet (Hex.to_string (`Hex packet)) channels.client channels.prefix in
+  let%lwt () = handle_packet packet channels.client channels.prefix in
   modem_loop channels
 
 let modem _logging ~device ~broker ~port ~proxy ~prefix ~certs =
