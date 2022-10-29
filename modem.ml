@@ -168,7 +168,7 @@ let string_of_values values =
 let rec publish_messages m client prefix =
   match m with
   | hd :: tl ->
-      let%lwt () = Mqtt.pub (prefix ^ (fst hd)) (snd hd) client in
+      let%lwt () = Mqtt.pub (prefix ^ (fst hd)) (snd hd) client true in
       publish_messages tl client prefix
   | [] -> Lwt.return ()
 
