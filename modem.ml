@@ -210,11 +210,8 @@ let handle_packet s client prefix =
       Lwt.return ())
 
 let rec modem_loop channels =
-  let packet = Buffer.create 80 in
-  let%lwt () = Serial.wait_for_packet channels.ic in
-  let%lwt () = Serial.read_packet channels.ic packet in
-  let%lwt _ok = handle_packet (Buffer.contents packet)
-    channels.client channels.prefix in
+  let%lwt packet = Lwt_io.read_line channels.ic in
+  let%lwt _ok = handle_packet (Hex.to_string (`Hex packet)) channels.client channels.prefix in
   modem_loop channels
 
 let display_topic channels _ topic payload id =
