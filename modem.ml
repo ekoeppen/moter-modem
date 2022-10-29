@@ -1,5 +1,12 @@
 open Cmdliner
 
+type channels_t = {
+  ic : Lwt_io.input Lwt_io.channel;
+  oc : out_channel;
+  client : Mqtt_lwt.t;
+  prefix : string;
+}
+
 type tag_t =
   | Sensor_reading_tag
   | Voltage_tag
@@ -17,8 +24,11 @@ type tag_t =
   | Ping_tag
   | Register_value_tag
   | Error_message_tag
-
-type response_t = (string * string) list option
+  | Modem_message_tag
+  | Modem_id_tag
+  | RF_packet_tag
+  | Mote_info_tag
+  | Revision_tag
 
 let tag_of_int t =
   match t with
@@ -38,6 +48,11 @@ let tag_of_int t =
   | 67 -> Ping_tag
   | 68 -> Register_value_tag
   | 69 -> Error_message_tag
+  | 70 -> Modem_message_tag
+  | 71 -> Modem_id_tag
+  | 72 -> RF_packet_tag
+  | 73 -> Mote_info_tag
+  | 74 -> Revision_tag
   | _ -> raise (Failure "Not a known tag")
 
 let string_of_tag t =
@@ -58,17 +73,13 @@ let string_of_tag t =
   | Ping_tag -> "Ping"
   | Register_value_tag -> "Register value"
   | Error_message_tag -> "Error message"
+  | Modem_message_tag -> "Modem message"
+  | Modem_id_tag -> "Modem ID"
+  | RF_packet_tag -> "RF packet"
+  | Mote_info_tag -> "Mote info"
+  | Revision_tag -> "Revision"
 
-let to_success = function
-  | None -> false
-  | _ -> true
-
-type channels_t = {
-  ic : Lwt_io.input Lwt_io.channel;
-  oc : out_channel;
-  client : Mqtt_lwt.t;
-  prefix : string;
-}
+type response_t = (string * string) list option
 
 let handle_heartbeat s =
   let open Core.Option.Let_syntax in
@@ -165,13 +176,6 @@ let string_of_values values =
     values in
   s ^ (Printf.sprintf "\"ts\":%.0f" (Unix.time ()))
 
-let rec publish_messages m client prefix =
-  match m with
-  | hd :: tl ->
-      let%lwt () = Mqtt.pub (prefix ^ (fst hd)) (snd hd) client true in
-      publish_messages tl client prefix
-  | [] -> Lwt.return ()
-
 let handle_sensor_reading s =
   let open Core.Option.Let_syntax in
   Logs.info (fun m -> m "Sensor data");
@@ -198,8 +202,14 @@ let handle_message s tag =
     | Error_message_tag -> handle_error_message s
     | _ -> Logs.err (fun m -> m "Not a valid start tag %d" tag); None
 
+let rec publish_messages m client prefix =
+  match m with
+  | hd :: tl ->
+      let%lwt () = Mqtt.pub (prefix ^ (fst hd)) (snd hd) client true in
+      publish_messages tl client prefix
+  | [] -> Lwt.return ()
+
 let handle_packet s client prefix =
-  Logs.debug (fun m -> m "Packet: ");
   match Cbor.tag_of_string s with
   | Some (tag, s) ->
       (match handle_message s tag with
@@ -211,19 +221,9 @@ let handle_packet s client prefix =
 
 let rec modem_loop channels =
   let%lwt packet = Lwt_io.read_line channels.ic in
+  Logs.debug (fun m -> m "Packet: %s" packet);
   let%lwt _ok = handle_packet (Hex.to_string (`Hex packet)) channels.client channels.prefix in
   modem_loop channels
-
-let display_topic channels _ topic payload id =
-  Logs.info (fun m -> m "Topic: %s Payload: %s Msg_id: %d" topic payload id);
-  let cmd = `Hex payload in
-  let bin_cmd = Hex.to_string cmd in
-  Serial.write_packet channels.oc bin_cmd;
-  Lwt.return ()
-
-let rec command_loop channels =
-  let%lwt () = Mqtt.process channels.client ~f:(display_topic channels) in
-  command_loop channels
 
 let modem _logging ~device ~broker ~port ~proxy ~prefix ~certs =
   Logs.debug (fun m -> m "Start reporting to %s:%d/%s" broker port prefix);
@@ -237,10 +237,8 @@ let modem _logging ~device ~broker ~port ~proxy ~prefix ~certs =
   let%lwt () = Mqtt_lwt.subscribe ~topics:[prefix ^ "/Modem/Cmd"] client in
   let channels = {ic = ic; oc = oc; prefix = prefix; client = client} in
   Lwt.pick [
-    Mqtt_lwt.process_publish_pkt client (display_topic channels);
     Mqtt_lwt.run client;
     modem_loop channels;
-    command_loop channels
   ]
 
 let lwt_wrapper logging device broker port proxy ca_file cert_file key_file prefix =
