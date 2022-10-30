@@ -30,17 +30,16 @@ let rec modem_loop channels =
   modem_loop channels
 ;;
 
-let modem _logging ~device ~broker ~port ~proxy ~prefix ~certs =
+let modem _logging ~device ~broker ~port ~prefix ~certs =
   Logs.debug (fun m -> m "Start reporting to %s:%d/%s" broker port prefix);
   if Conn.valid certs
   then Logs.debug (fun m -> m "Certs: %s %s %s" certs.cert certs.key certs.ca);
-  if proxy <> "" then Logs.debug (fun m -> m "Proxy: %s" proxy);
   let ic, oc = Serial.open_device device in
   let id =
     Random.self_init ();
     Random.bits () |> Printf.sprintf "mqtt_lwt_%d"
   in
-  let%lwt mqtt_ic, mqtt_oc = Conn.connect ~host:broker ~port ~proxy ~certs in
+  let%lwt mqtt_ic, mqtt_oc = Conn.connect ~host:broker ~port ~certs in
   let%lwt client =
     Mqtt_lwt.connect
       { oc = mqtt_oc; ic = mqtt_ic }
@@ -51,9 +50,14 @@ let modem _logging ~device ~broker ~port ~proxy ~prefix ~certs =
   Lwt.pick [ Mqtt_lwt.run client; modem_loop channels ]
 ;;
 
-let lwt_wrapper logging device broker port proxy ca_file cert_file key_file prefix =
+let rec lwt_wrapper logging device broker port ca_file cert_file key_file prefix =
   let certs : Conn.certs_t = { cert = cert_file; key = key_file; ca = ca_file } in
-  Lwt_main.run (modem logging ~device ~broker ~port ~proxy ~prefix ~certs)
+  try Lwt_main.run (modem logging ~device ~broker ~port ~prefix ~certs) with
+  | Lwt_unix.Timeout ->
+    Logs.err (fun m -> m "Timeout reading from the modem, restarting");
+    Unix.sleep 10;
+    lwt_wrapper logging device broker port ca_file cert_file key_file prefix
+  | e -> Logs.err (fun m -> m "Exception: %s" (Printexc.to_string e))
 ;;
 
 let setup_log style_renderer level =
@@ -66,12 +70,6 @@ let setup_log style_renderer level =
 let logging_arg =
   let env = Cmd.Env.info "MOTER_MODEM_VERBOSITY" in
   Term.(const setup_log $ Fmt_cli.style_renderer () $ Logs_cli.level ~env ())
-;;
-
-let proxy_arg =
-  let doc = "SOCKS5 proxy" in
-  let env = Cmd.Env.info "MOTER_SOCKS_PROXY" in
-  Arg.(value & opt string "" & info [ "proxy" ] ~env ~doc)
 ;;
 
 let device_arg =
@@ -119,7 +117,6 @@ let cmd =
       $ device_arg
       $ broker_arg
       $ port_arg
-      $ proxy_arg
       $ ca_file
       $ cert_file
       $ key_file

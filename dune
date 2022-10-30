@@ -21,8 +21,6 @@
   unix
   cbor
   extunix
-  socks_client
-  rresult
   ipaddr
   mqtt_lwt
   uri
