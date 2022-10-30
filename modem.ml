@@ -24,7 +24,7 @@ let handle_packet s client prefix =
 ;;
 
 let rec modem_loop channels =
-  let%lwt packet = Lwt_io.read_line channels.ic in
+  let%lwt packet = Lwt_unix.with_timeout 60.0 (fun () -> Lwt_io.read_line channels.ic) in
   Logs.debug (fun m -> m "Packet: %s" packet);
   let%lwt () = handle_packet packet channels.client channels.prefix in
   modem_loop channels

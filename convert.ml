@@ -108,7 +108,6 @@ let handle_register_value s : response_t =
         value
         (Unix.time ()) )
   | _ ->
-    ();
     let%bind _n, s = Cbor.array_of_string s in
     let%bind register, s = Cbor.int_of_string s in
     let%map value, _ = Cbor.int_of_string s in
