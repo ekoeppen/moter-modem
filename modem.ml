@@ -30,8 +30,8 @@ let rec modem_loop channels =
   modem_loop channels
 ;;
 
-let modem _logging ~device ~broker ~port ~prefix ~certs =
-  Logs.debug (fun m -> m "Start reporting to %s:%d/%s" broker port prefix);
+let modem _logging ~device ~host ~port ~prefix ~certs =
+  Logs.debug (fun m -> m "Start reporting to %s:%d/%s" host port prefix);
   if Conn.valid certs
   then Logs.debug (fun m -> m "Certs: %s %s %s" certs.cert certs.key certs.ca);
   let ic, oc = Serial.open_device device in
@@ -39,7 +39,7 @@ let modem _logging ~device ~broker ~port ~prefix ~certs =
     Random.self_init ();
     Random.bits () |> Printf.sprintf "mqtt_lwt_%d"
   in
-  let%lwt mqtt_ic, mqtt_oc = Conn.connect ~host:broker ~port ~certs in
+  let%lwt mqtt_ic, mqtt_oc = Conn.connect ~host ~port ~certs in
   let%lwt client =
     Mqtt_lwt.connect
       { oc = mqtt_oc; ic = mqtt_ic }
@@ -50,13 +50,13 @@ let modem _logging ~device ~broker ~port ~prefix ~certs =
   Lwt.pick [ Mqtt_lwt.run client; modem_loop channels ]
 ;;
 
-let rec lwt_wrapper logging device broker port ca_file cert_file key_file prefix =
+let rec lwt_wrapper logging device host port ca_file cert_file key_file prefix =
   let certs : Conn.certs_t = { cert = cert_file; key = key_file; ca = ca_file } in
-  try Lwt_main.run (modem logging ~device ~broker ~port ~prefix ~certs) with
+  try Lwt_main.run (modem logging ~device ~host ~port ~prefix ~certs) with
   | Lwt_unix.Timeout ->
     Logs.err (fun m -> m "Timeout reading from the modem, restarting");
     Unix.sleep 10;
-    lwt_wrapper logging device broker port ca_file cert_file key_file prefix
+    lwt_wrapper logging device host port ca_file cert_file key_file prefix
   | e -> Logs.err (fun m -> m "Exception: %s" (Printexc.to_string e))
 ;;
 
@@ -78,8 +78,8 @@ let device_arg =
   Arg.(value & opt string "/dev/ttyUSB0" & info [ "d"; "device" ] ~env ~doc)
 ;;
 
-let broker_arg =
-  let doc = "MQTT broker" in
+let host_arg =
+  let doc = "MQTT host" in
   Arg.(value & opt string "localhost" & info [ "h"; "host" ] ~doc)
 ;;
 
@@ -115,7 +115,7 @@ let cmd =
       const lwt_wrapper
       $ logging_arg
       $ device_arg
-      $ broker_arg
+      $ host_arg
       $ port_arg
       $ ca_file
       $ cert_file
