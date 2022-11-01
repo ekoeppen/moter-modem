@@ -30,10 +30,8 @@ let rec modem_loop channels =
   modem_loop channels
 ;;
 
-let modem _logging ~device ~host ~port ~prefix ~certs =
+let modem ~device ~host ~port ~prefix ~certs =
   Logs.debug (fun m -> m "Start reporting to %s:%d/%s" host port prefix);
-  if Conn.valid certs
-  then Logs.debug (fun m -> m "Certs: %s %s %s" certs.cert certs.key certs.ca);
   let ic, oc = Serial.open_device device in
   let id =
     Random.self_init ();
@@ -45,14 +43,13 @@ let modem _logging ~device ~host ~port ~prefix ~certs =
       { oc = mqtt_oc; ic = mqtt_ic }
       ~opts:{ Mqtt_lwt.default_conn_opts with client_id = id }
   in
-  let%lwt () = Mqtt_lwt.subscribe ~topics:[ prefix ^ "/Modem/Cmd" ] client in
   let channels = { ic; oc; prefix; client } in
   Lwt.pick [ Mqtt_lwt.run client; modem_loop channels ]
 ;;
 
 let rec lwt_wrapper logging device host port ca_file cert_file key_file prefix =
   let certs : Conn.certs_t = { cert = cert_file; key = key_file; ca = ca_file } in
-  try Lwt_main.run (modem logging ~device ~host ~port ~prefix ~certs) with
+  try Lwt_main.run (modem ~device ~host ~port ~prefix ~certs) with
   | Lwt_unix.Timeout ->
     Logs.err (fun m -> m "Timeout reading from the modem, restarting");
     Unix.sleep 10;
