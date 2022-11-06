@@ -8,7 +8,6 @@ let reset f =
 
 let open_device device =
   let f = Unix.openfile device [ Unix.O_RDWR ] 0644 in
-  Logs.info (fun m -> m "Device %s opened" device);
   let attr = Unix.tcgetattr f in
   let new_attr =
     { attr with
@@ -28,6 +27,6 @@ let open_device device =
   Unix.tcsetattr f Unix.TCSANOW new_attr;
   reset f;
   let ic = Lwt_io.of_unix_fd ~mode:Lwt_io.input f in
-  let oc = Unix.out_channel_of_descr f in
+  let oc = Lwt_io.of_unix_fd ~mode:Lwt_io.output f in
   ic, oc
 ;;

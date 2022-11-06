@@ -11,7 +11,6 @@ let connect_socket host port =
   let%lwt host_info = Lwt_unix.gethostbyname host in
   let server_address = host_info.Lwt_unix.h_addr_list.(0) in
   let%lwt () = Lwt_unix.connect socket (Lwt_unix.ADDR_INET (server_address, port)) in
-  Logs.debug (fun m -> m "Socket connection to host %s" host);
   Lwt.return socket
 ;;
 
